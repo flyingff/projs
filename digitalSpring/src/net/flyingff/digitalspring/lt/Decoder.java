@@ -44,7 +44,7 @@ class Unit{
 	int remainings;
 	byte[] data;
 	int offset;
-	public Unit(){
+	public Unit(byte[] data, int offset, int... packets){
 		
 	}
 }
