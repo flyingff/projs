@@ -45,6 +45,9 @@ class Unit{
 	byte[] data;
 	int offset;
 	public Unit(byte[] data, int offset, int... packets){
-		
+		this.data = data;
+		this.offset = offset;
+		this.packets = packets;
+		remainings = packets.length;
 	}
 }
