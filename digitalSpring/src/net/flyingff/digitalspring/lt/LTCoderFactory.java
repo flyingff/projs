@@ -8,11 +8,11 @@ public class LTCoderFactory {
 	public void setDropLen(int dropLen) {
 		this.dropLen = dropLen;
 	}
-	public Encoder build(byte[] data){
-		return new Encoder(dropLen, data);
+	public Encoder buildEnocder(){
+		return new Encoder(dropLen);
 	}
 	
-	public Decoder build(){
+	public Decoder buildDecoder(){
 		return new Decoder(dropLen);
 	}
 }
