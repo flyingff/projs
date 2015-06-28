@@ -32,9 +32,10 @@ public class Encoder {
 		int writelen = 4, seed = (int) System.nanoTime();
 		// write seed in
 		buf.putInt(seed);
+		//System.out.println("put seed = " + seed);
 		Random r = new Random(seed);
 		while(buf.remaining() >= dropLen) {
-			int num = ((r.nextInt() & 0xff) % 3) + 1;	// 1-3 blocks selected
+			int num = getNumber(r);	// 1-3 blocks selected
 outer:		for(int i = 0; i < num; i++) { 
 				int offx = ((r.nextInt() & 0x7fffffff) % (maxDropIndex + 1)) * dropLen;
 				repeat[i] = offx;
@@ -42,12 +43,11 @@ outer:		for(int i = 0; i < num; i++) {
 					if (repeat[j] == offx)
 						continue outer;
 				}
-				//System.out.println(offx + 256);
 				if (i == 0) {
-					copy(dest, writelen, data, offx);
+					copy(dest, writelen + offset, data, offx);
 					//System.out.print("data in " + writelen / dropLen + " comes from: " + offx / dropLen);
 				} else {
-					exclusive(dest, writelen, data, offx);
+					exclusive(dest, writelen + offset, data, offx);
 					//System.out.print(", " + offx / dropLen);
 				}
 			}
@@ -68,5 +68,9 @@ outer:		for(int i = 0; i < num; i++) {
 			//System.out.print(() + ", ");
 		}
 		//System.out.println();
+	}
+	public static final int getNumber(Random r) {
+		int rnd = (r.nextInt() & 0xff) % 6;
+		return rnd < 3? 1: (rnd < 5? 2: 3);
 	}
 }

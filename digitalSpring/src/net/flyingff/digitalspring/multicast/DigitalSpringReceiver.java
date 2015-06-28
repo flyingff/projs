@@ -1,31 +1,36 @@
 package net.flyingff.digitalspring.multicast;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
-import java.net.SocketException;
+import java.net.SocketAddress;
+import java.net.StandardSocketOptions;
+import java.nio.ByteBuffer;
+import java.nio.channels.DatagramChannel;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 
-import net.flyingff.digitalspring.util.ArrayInputStream;
+import net.flyingff.digitalspring.lt.Decoder;
+import net.flyingff.digitalspring.lt.LTCoderFactory;
 
 public class DigitalSpringReceiver {
-	private final DatagramPacket recv = new DatagramPacket(new byte[65536], 65536);
-	private final DatagramPacket ACK = new DatagramPacket(new byte[6], 6); {
+	private static final int RECVSIZE = 65536;
+	private final ByteBuffer recv = ByteBuffer.allocate(RECVSIZE);
+	private final ByteBuffer ACK = ByteBuffer.allocate(16); {
 		try {
 			byte[] mac = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getHardwareAddress();
-			byte[] dest = ACK.getData();
-			for(int i = 0; i < mac.length && i < dest.length; i++) {
-				dest[i] = mac[i];
-			}
+			ByteBuffer tmp = ByteBuffer.allocate(8).put(mac);
+			tmp.position(8).flip();
+			ACK.position(8);
+			ACK.putLong(tmp.getLong());
 		} catch (Exception e) {e.printStackTrace();}
 	}
-	private DatagramSocket ds;
+	private DatagramChannel dc;
+	private Selector sel;
 	private ReceiveListener rl;
-	private long currstamp;
-	private byte[] currdata = null;
-	private int bottlecnt, droplen;
-	private boolean bottle[];
+	private long currstamp = 0;
+	private Decoder dec;
 	private boolean committed = false;
 	
 	public void setReceiveListener(ReceiveListener rl) {this.rl = rl;}
@@ -33,76 +38,85 @@ public class DigitalSpringReceiver {
 	
 	public DigitalSpringReceiver(int port) {
 		try {
-			ds = new DatagramSocket(port);
-			ds.setReceiveBufferSize(65536 * 2);
-		} catch (SocketException e) {
+			dc = DatagramChannel.open()
+					.bind(new InetSocketAddress(port))
+					.setOption(StandardSocketOptions.SO_RCVBUF, recv.capacity() * 2);
+			dc.configureBlocking(false);
+			sel = Selector.open();
+			dc.register(sel, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+			dec = new LTCoderFactory().setDropLen(1024).buildDecoder();
+		} catch (Exception e) {
 			e.printStackTrace();
 		}
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
-				while(true) {
-					try {
-						ds.receive(recv);
-						if (recv.getLength() == DigitalSpringSender.HELLODATA.length ) {
-							for(int i = 0; i < DigitalSpringSender.HELLODATA.length; i++) {
-								if (recv.getData()[i] != DigitalSpringSender.HELLODATA[i])
-									continue;
+				while(true) try {
+					if(sel.select() <= 0) continue;
+					for(SelectionKey skx : sel.selectedKeys()) {
+						if (!skx.isReadable()) continue;
+						recv.position(0);
+						final SocketAddress srcaddr = dc.receive(recv);
+						final int pktlen = recv.position();
+						recv.position(0);
+						final long stamp = recv.getLong();
+						//System.out.println("recv pkt#" + stamp + " len: " + pktlen);
+						if (pktlen == DigitalSpringSender.HELLODATA.length + 8) {
+							boolean eq = true;
+							byte[] data = recv.array();
+							for(int i = 0; eq && i < DigitalSpringSender.HELLODATA.length; i++) {
+								eq = data[i + 8] == DigitalSpringSender.HELLODATA[i];
 							}
-							sendack(recv);
-						} else {
-							ArrayInputStream ais = new ArrayInputStream(recv.getData(), recv.getLength());
-							//System.out.println("recved:" + Arrays.toString(recv.getData()));
-							long stamp = ais.readl();
-							if (currdata == null || stamp != currstamp) {
-								int maxserial = ais.readi(), datalen = ais.readi();
-								droplen = ais.readi();
-								currstamp = stamp;
-								bottlecnt = 0;
-								bottle = new boolean[maxserial + 1];
-								currdata = new byte[datalen];
-								committed = false;
-								
-								//System.out.println("new packet: stamp[" + stamp + "], maxserial[" + maxserial + "], datalen[" + datalen + "], droplen[" + droplen +"]");
-							} else {
-								ais.skip(12);
-							}
-							if (committed) {
-								if (Math.random() > 0.5)
-									sendack(recv);
-							} else {
-								while(ais.hasNext()) {
-									int sx = ais.readi();
-									int lenx = ais.readi();
-									//System.out.println("packet #" + sx + ": len " + lenx);
-									if (!bottle[sx]) {
-										ais.read(currdata, sx * droplen, lenx);
-										bottle[sx] = true;
-										bottlecnt ++;
-										//System.out.println(Arrays.toString(recv.getData()));
-									}
-								}
-								if (bottlecnt >= bottle.length) {
-									sendack(recv);
-									if(!committed){
-										rl.onData(currdata);
-										committed = true;
-									}
-								}
+							if (eq) {
+								sendack(srcaddr, stamp);
+								continue;
 							}
 						}
-					} catch (Exception e) {
-						System.err.println(e.toString());
+						// read mode start
+						//System.out.println("recved:" + Arrays.toString(recv.getData()));
+						if (stamp != currstamp) {
+							recv.position(8);
+							int datalen = recv.getInt();
+							System.out.println("New DATASEG, data within len:" + datalen);
+							dec.init(datalen);
+							currstamp = stamp;
+							committed = false;
+						}
+						//System.out.println("recv: " + Arrays.toString(recv.array()));
+						if (committed) {
+							sendack(srcaddr, stamp);
+						} else {
+							//recv.position(12);
+							//recvbuf.position(0);
+							//recvbuf.put(recv);
+							byte[] datarecv = new byte[pktlen - 12];
+							System.arraycopy(recv.array(), 12, datarecv, 0, datarecv.length);
+							if (dec.update(datarecv, 0, datarecv.length)){
+								committed = true;
+								sendack(srcaddr, stamp);
+								if(rl != null) rl.onData(dec.finish());
+							}
+						}
 					}
+				} catch (Exception e) {
+					e.printStackTrace();
+					return;
 				}
 			}
 		}).start();
 	}
-	public void sendack(DatagramPacket rcv){
-		try {
-			ACK.setAddress(rcv.getAddress());
-			ACK.setPort(rcv.getPort());
-			ds.send(ACK);
+	public void sendack(SocketAddress addr, long tmstmp){
+		while(true)	try {
+			if (sel.select() <= 0) continue;
+			for(SelectionKey kx : sel.selectedKeys()) {
+				if (!kx.isWritable()) continue;
+				ACK.position(0);
+				ACK.putLong(tmstmp).position(0);
+				dc.send(ACK, addr);
+				//System.out.println("ack");
+				return;
+			}
+			sel.selectedKeys().clear();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}

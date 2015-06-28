@@ -20,25 +20,28 @@ public class Decoder {
 		buf = null;
 		flag = null;
 		unitList.clear();
+		mergedCnt = 0;
 	}
 	
 	public void init(int len){
 		this.buf = new byte[len];
-		maxDropIndex = (int) Math.ceil((double)buf.length / dropLen) - 1;
+		maxDropIndex = (int) Math.ceil((double)len / dropLen) - 1;
 		flag = new boolean[maxDropIndex + 1];
+		unitList.clear();
+		mergedCnt = 0;
+		//System.err.println("flag len = " + flag.length + ", data len = " + len);
 	}
 	private int[] alistx = new int[4];
 	public boolean update(byte[] data, int offset, int len){
 		if (this.buf == null) throw new IllegalStateException("Not inited.");
 		ByteBuffer buf = ByteBuffer.wrap(data, offset, len);
 		// set buffer to read mode
-		buf.limit(len);
-		buf.position(0);
 		// get seed and data drops
 		int seed = buf.getInt();
+		//System.out.print("seed = " + seed + ", ");
 		Random r = new Random(seed);
 		while(buf.remaining() >= dropLen) {
-			int num = ((r.nextInt() & 0xff) % 3) + 1;	// 1-3 blocks selected
+			int num = Encoder.getNumber(r);	// 1-3 blocks selected
 			int fakenum = 0;
 outer:		for(int i = 0; i < num; i++) {
 				int indexx = ((r.nextInt() & 0x7fffffff) % (maxDropIndex + 1));
@@ -56,10 +59,15 @@ outer:		for(int i = 0; i < num; i++) {
 			Unit ux = new Unit(data, buf.position(), Arrays.copyOf(alistx, num - fakenum));
 			//System.err.println(ux);
 			put(ux);
+			//System.out.println(ux);
 			buf.position(buf.position() + dropLen);
 		}
+		//System.err.println("decoder serial:" + test);
 		// after adding all drops, just try to merge them.
 		tryMerge();
+		//buf.position(offset);
+		//System.out.println(buf.getInt());
+		//System.out.println("merge cnt = " + mergedCnt + ", all = "+ flag.length);
 		return mergedCnt >= flag.length;
 	}
 	public byte[] finish(){
@@ -151,7 +159,7 @@ outer:		for(int i = 0; i < num; i++) {
 		}
 		@Override
 		public String toString() {
-			return "[Ux#" + offset / dropLen + " " + Arrays.toString(packets) + "]";
+			return "[Ux@" + offset + " " + Arrays.toString(packets) + "]";
 		}
 	}
 }

@@ -5,8 +5,9 @@ public class LTCoderFactory {
 	public int getDropLen() {
 		return dropLen;
 	}
-	public void setDropLen(int dropLen) {
+	public LTCoderFactory setDropLen(int dropLen) {
 		this.dropLen = dropLen;
+		return this;
 	}
 	public Encoder buildEnocder(){
 		return new Encoder(dropLen);

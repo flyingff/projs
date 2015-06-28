@@ -1,12 +1,18 @@
 package net.flyingff.digitalspring.multicast;
 
-import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketTimeoutException;
+import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
+import java.net.StandardProtocolFamily;
+import java.net.StandardSocketOptions;
+import java.nio.ByteBuffer;
+import java.nio.channels.DatagramChannel;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.util.HashSet;
-import java.util.Random;
+
+import net.flyingff.digitalspring.lt.Encoder;
+import net.flyingff.digitalspring.lt.LTCoderFactory;
 
 public class DigitalSpringSender {
 	public static final byte[] HELLODATA = "HELLO".getBytes();
@@ -15,14 +21,16 @@ public class DigitalSpringSender {
 		try { ADDR_MULTICAST = InetAddress.getByName("255.255.255.255"); } catch(Exception e) { e.printStackTrace();}
 	}
 	private static final int PACKETLEN = 65536;
-	private final DatagramPacket HELLOPACKET = new DatagramPacket(HELLODATA, HELLODATA.length);
-	private final DatagramPacket ACKRECV = new DatagramPacket(new byte[255], 255);
-	private final DatagramPacket DATAPACKET = new DatagramPacket(new byte[PACKETLEN], PACKETLEN);
+	private final ByteBuffer HELLOPACKET = ByteBuffer.allocate(HELLODATA.length + 8);
+	private final ByteBuffer ACKRECV = ByteBuffer.allocate(256);
+	private final ByteBuffer DATAPACKET = ByteBuffer.allocate(PACKETLEN);
+	private final InetSocketAddress baddr;
 	private HashSet<Long> ackedclient = new HashSet<>();
 	
 	private int dropLen = 4096; 
-	private SpringCup cup;
-	private DatagramSocket ds;
+	private Encoder ec;
+	private DatagramChannel ds;
+	private Selector sel;
 	private int clientCnt = 1;
 	private boolean autoClientDetect = false;
 	
@@ -37,133 +45,101 @@ public class DigitalSpringSender {
 	}
 	public DigitalSpringSender(int port) {
 		try {
-			ds = new DatagramSocket();
-			ds.setReceiveBufferSize(8192);
-			ds.setBroadcast(true);
-			ds.setSoTimeout(100);
-			HELLOPACKET.setAddress(ADDR_MULTICAST);
-			HELLOPACKET.setPort(port);
-			DATAPACKET.setAddress(ADDR_MULTICAST);
-			DATAPACKET.setPort(port);
+			ds = DatagramChannel.open(StandardProtocolFamily.INET)
+//		         .setOption(StandardSocketOptions.SO_REUSEADDR, true)
+		         .bind(null)
+		         .setOption(StandardSocketOptions.SO_BROADCAST, true)
+		         .setOption(StandardSocketOptions.IP_MULTICAST_IF, NetworkInterface.getByInetAddress(InetAddress.getLocalHost()));
+			ds.configureBlocking(false);
+			
+			baddr = new InetSocketAddress(ADDR_MULTICAST, port);
+			sel = Selector.open();
+			ds.register(sel, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
+		ec = new LTCoderFactory().setDropLen(1024).buildEnocder();
 	}
 	public int detectClient(){
-		clientCnt = 0;
 		ackedclient.clear();
+		HELLOPACKET.position(0);
+		long stmp = System.currentTimeMillis();
+		HELLOPACKET.putLong(stmp).put(HELLODATA);
 		for(int i = 0; i < 3; i++) {
 			try {
-				ds.send(HELLOPACKET);
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			
-			try {
-				while(true) {
-					ds.receive(ACKRECV);
-					if (ACKRECV.getLength() == 6) {
-						long n = 0;
-						byte[] data = ACKRECV.getData();
-						for(int k = 0; k < 6; k++) {
-							n |= (((long)data[k] & 0xff) << ((5 - k) * 8));
-						}
-						if (!ackedclient.contains(n)) {
-							ackedclient.add(n);
-							clientCnt ++;
-						}
-					}
-				}
-			} catch(SocketTimeoutException e) {}
-			catch (Exception e) {
+				HELLOPACKET.position(0);
+				ds.send(HELLOPACKET, baddr);
+				Thread.sleep(10);
+				tryRecvAck(stmp);
+				Thread.sleep(10);
+			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		}
+		clientCnt = ackedclient.size();
 		return clientCnt;
 	}
-	private static void swap(int[] arr, int x, int y) {
-		if (x == y) return;
-		arr[x] ^= arr[y];arr[y] ^= arr[x];arr[x] ^= arr[y];
+	private void tryRecvAck(long tmstmp){
+		try {
+			if(sel.selectNow() > 0) {
+				for (SelectionKey kx : sel.selectedKeys()) {
+					if (kx.isReadable()) {
+						ACKRECV.position(0);
+						((DatagramChannel) kx.channel()).receive(ACKRECV);
+						if (ACKRECV.position() == 16) {
+							ACKRECV.position(0);
+							if (ACKRECV.getLong() != tmstmp) continue;
+							long n = ACKRECV.getLong();
+							if (!ackedclient.contains(n)) {
+								ackedclient.add(n);
+								//clientCnt ++;
+							}
+						}
+					}
+				}
+				sel.selectedKeys().clear();
+			}
+		} catch(Exception e) {e.printStackTrace();}
 	}
 	
 	public boolean send(byte[] data, final long timeout) {
 		if (clientCnt < 1) return false;
-		cup = new SpringCup(data);
-		int[] serials = new int[cup.getMaxSerialNumber() + 1];
-		for(int i = 0 ; i < serials.length; i++) {
-			serials[i] = i;
-			swap(serials, i, (int) (Math.random() * (i + 1)));
-		}
-		int groupSCnt = (int) Math.floor((double)(PACKETLEN - 20) / (dropLen + 8));
-		int groupCnt = (int) Math.ceil((double)data.length / (groupSCnt * dropLen));
 		long begintm = System.currentTimeMillis();
-		for(int i = 0 ; i < groupCnt; i++) {
-			int offset = groupSCnt * i;
-			int len = serials.length - offset;
-			if (len > groupSCnt) { len = groupSCnt;}
-			DATAPACKET.setLength(cup.makePacket(serials, offset, len, DATAPACKET.getData()));
-			try {
-				ds.send(DATAPACKET);
-				//System.out.println(DATAPACKET);
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-		int i = 0;
 		ackedclient.clear();
+		ec.setData(data);
+		DATAPACKET.position(0);
+		DATAPACKET.putLong(begintm).putInt(data.length);
 		while(System.currentTimeMillis() - begintm < timeout){
-			if (i == 0) {
-				for(int j = 0 ; j < serials.length; j++) {
-					swap(serials, j, (int) (Math.random() * serials.length));
-				}
-			}
+			DATAPACKET.limit(ec.write(DATAPACKET.array(), 12, PACKETLEN - 12) + 12).position(0);
+			//System.out.println("SEND DATASEG, len: " + DATAPACKET.limit());
+			//System.out.println(Arrays.toString(DATAPACKET.array()));
 			try {
-				while(true) {
-					ds.receive(ACKRECV);
-					if (ACKRECV.getLength() == 6) {
-						long n = 0;
-						byte[] drcv = ACKRECV.getData();
-						for(int k = 0; k < 6; k++) {
-							n |= (((long)drcv[k] & 0xff) << ((5 - k) * 8));
-						}
-						if (!ackedclient.contains(n)) {
-							ackedclient.add(n);
-						}
+				while(sel.select() <= 0) {Thread.yield();}
+				for(SelectionKey skx : sel.selectedKeys()) {
+					if (skx.isWritable()){
+						ds.send(DATAPACKET, baddr);
+						//System.out.println("send: " + Arrays.toString(DATAPACKET.array()));
+						break;
 					}
 				}
-			} catch(SocketTimeoutException e) {}
-			catch (Exception e) {
+				sel.selectedKeys().clear();
+				Thread.sleep(5);
+			} catch (Exception e) {
 				e.printStackTrace();
 			}
+			tryRecvAck(begintm);
 			if (ackedclient.size() >= clientCnt) {
 				if (autoClientDetect) {
 					clientCnt = ackedclient.size();
 				}
 				return true;
 			}
-			// if not enough ACKS, it will send packets again...
-			int offset = groupSCnt * i;
-			int len = serials.length - offset;
-			if (len > groupSCnt) { len = groupSCnt;}
-			DATAPACKET.setLength(cup.makePacket(serials, offset, len, DATAPACKET.getData()));
-			try {
-				ds.send(DATAPACKET);
-				//System.out.println(DATAPACKET);
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			i = (i + 1) % groupCnt;
+			//else {
+			//	System.out.println("not enough, curr: " + ackedclient.size() + ", expect: " + clientCnt);
+			//}
 		}
+		// timeout...
 		return false;
-	}
-	public static void main(String[] args) {
-		/*DigitalSpringSender ss = new DigitalSpringSender(10086);
-		System.out.println(ss.getClientCnt());
-		System.out.println(ss.send("this is a test string...".getBytes(), 123));*/
-		Random r = new Random(2374), r2 = new Random(2374);
-		for(int i = 0; i < 10; i++) {
-			System.out.println(r.nextInt() == r2.nextInt());
-		}
 	}
 }
 
