@@ -60,7 +60,7 @@ public class DigitalSpringReceiver {
 						final int pktlen = recv.position();
 						recv.position(0);
 						final long stamp = recv.getLong();
-						//System.out.println("recv pkt#" + stamp + " len: " + pktlen);
+						System.out.println("recv pkt#" + stamp + " len: " + pktlen);
 						if (pktlen == DigitalSpringSender.HELLODATA.length + 8) {
 							boolean eq = true;
 							byte[] data = recv.array();
@@ -77,7 +77,7 @@ public class DigitalSpringReceiver {
 						if (stamp != currstamp) {
 							recv.position(8);
 							int datalen = recv.getInt();
-							System.out.println("New DATASEG, data within len:" + datalen);
+							//System.out.println("New DATASEG, data within len:" + datalen);
 							dec.init(datalen);
 							currstamp = stamp;
 							committed = false;

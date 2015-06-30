@@ -13,7 +13,7 @@ import javax.imageio.ImageIO;
 
 public class Test {
 	public static void main(String[] args) {
-		int sum = 0, cnt = 1, tmp;
+		int sum = 0, cnt = 100, tmp;
 		for(int i = 0; i < cnt; i++){
 			tmp = test();
 			if (tmp == -1) throw new RuntimeException();
@@ -31,7 +31,7 @@ public class Test {
 		try {
 			BufferedImage bi = new Robot().createScreenCapture(new Rectangle(0,0,1000,1000));
 			ByteArrayOutputStream bos = new ByteArrayOutputStream();
-			ImageIO.write(bi, "png", bos);
+			ImageIO.write(bi, "jpeg", bos);
 			data = bos.toByteArray();
 		} catch(Exception e) {e.printStackTrace();}
 		
