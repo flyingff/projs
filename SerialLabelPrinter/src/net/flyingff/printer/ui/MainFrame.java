@@ -178,7 +178,7 @@ public class MainFrame extends JFrame {
 		
 		JLabel panelLight = new JLabel();
 		panelLight.setBorder(new LineBorder(Color.LIGHT_GRAY));
-		panelLight.setPreferredSize(new Dimension(256, 256));
+		panelLight.setPreferredSize(new Dimension(258, 258));
 		panel_9.add(panelLight);
 		
 		JPanel panel_10 = new JPanel();
