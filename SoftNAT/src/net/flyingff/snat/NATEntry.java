@@ -66,7 +66,7 @@ public class NATEntry implements Serializable{
 	}
 	
 	public static enum NATStatus {
-		STARTING("Starting"), STARTED("OK"), ERROR("Error");
+		STOPPED("Stopped"), STARTING("Starting"), STARTED("OK"), ERROR("Error");
 		private final String name;
 		private NATStatus(String name) {
 			this.name = name;

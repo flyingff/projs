@@ -157,6 +157,7 @@ public class StatusDialog extends Shell {
 					case STARTED:
 						return colorGreen;
 					case STARTING:
+					case STOPPED:
 						return colorBlue;
 					}
 				}
