@@ -20,6 +20,7 @@ import org.eclipse.swt.widgets.Tray;
 import org.eclipse.swt.widgets.TrayItem;
 
 import net.flyingff.snat.NATEntry;
+import net.flyingff.snat.ProxyManager;
 
 public class Application {
 	private final TrayItem tray;
@@ -37,12 +38,14 @@ public class Application {
 		
 		this.tray = createTray(d);
 		createTrayMenu();
+		new ProxyManager(entries);
 
 		while(!sh.isDisposed()) {
 			if(d.readAndDispatch()) {
 				d.sleep();
 			}
 		}
+		saveEntries();
 		d.dispose();
 	}
 	private TrayItem createTray(Display d) {
@@ -107,6 +110,7 @@ public class Application {
 		}
 		try(ObjectInputStream ois = new ObjectInputStream(new FileInputStream(storageFile))) {
 			entries = (List<NATEntry>) ois.readObject();
+			entries.forEach(it->it.restore());
 		} catch (Exception e) {
 			e.printStackTrace();
 		}

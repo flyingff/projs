@@ -4,12 +4,12 @@ import java.io.Serializable;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
-public class NATEntry implements Serializable{
+public class NATEntry implements Serializable {
 	private static final long serialVersionUID = 1L;
 	private final int localPort, externalPort;
 	private Pattern ipRegExp;
 	
-	private transient NATStatus status = NATStatus.STARTING;
+	private NATStatus status = NATStatus.STOPPED;
 	private transient int connections = 0;
 	private transient long dataTransfered = 0;
 	
@@ -17,6 +17,31 @@ public class NATEntry implements Serializable{
 		this.localPort = localPort;
 		this.externalPort = externalPort;
 		ipRegExp = Pattern.compile(".*");
+	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + externalPort;
+		result = prime * result + localPort;
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		NATEntry other = (NATEntry) obj;
+		if (externalPort != other.externalPort)
+			return false;
+		if (localPort != other.localPort)
+			return false;
+		return true;
 	}
 
 	public String getIpRegExp() {
@@ -36,16 +61,22 @@ public class NATEntry implements Serializable{
 		return connections;
 	}
 
-	public void setConnections(int connections) {
-		this.connections = connections;
+	public void incConnections() {
+		connections += 1;
+	}
+	public void decConnections() {
+		connections += 1;
+	}
+	public void resetConnections() {
+		connections = 0;
 	}
 
 	public long getDataTransfered() {
 		return dataTransfered;
 	}
 
-	public void setDataTransfered(long dataTransfered) {
-		this.dataTransfered = dataTransfered;
+	public void acuumulateDataTransfered(long dataTransfered) {
+		this.dataTransfered += dataTransfered;
 	}
 
 	public int getLocalPort() {
@@ -57,7 +88,7 @@ public class NATEntry implements Serializable{
 	}
 	public NATStatus getStatus() {
 		if(status == null) {
-			status = NATStatus.STARTING;
+			status = NATStatus.STOPPED;
 		}
 		return status;
 	}
@@ -66,7 +97,7 @@ public class NATEntry implements Serializable{
 	}
 	
 	public static enum NATStatus {
-		STOPPED("Stopped"), STARTING("Starting"), STARTED("OK"), ERROR("Error");
+		STOPPED("Stopped"), STARTING("Starting"), STARTED("OK"), ERROR("Error"), STOPPING("Stopping");
 		private final String name;
 		private NATStatus(String name) {
 			this.name = name;
@@ -74,6 +105,14 @@ public class NATEntry implements Serializable{
 		@Override
 		public String toString() {
 			return name;
+		}
+	}
+
+	public void restore() {
+		if(status == NATStatus.STARTED) {
+			status = NATStatus.STARTING;
+		} else {
+			status = NATStatus.STOPPED;
 		}
 	}
 }

@@ -82,7 +82,7 @@ public class StatusDialog extends Shell {
 		table = tableViewer.getTable();
 		table.setLinesVisible(true);
 		table.setHeaderVisible(true);
-		table.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true, 1, 4));
+		table.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true, 1, 6));
 		tableViewer.setContentProvider(new IStructuredContentProvider() {
 			@Override
 			public Object[] getElements(Object e) {
@@ -95,7 +95,7 @@ public class StatusDialog extends Shell {
 		
 		TableViewerColumn tableViewerLocalPort = new TableViewerColumn(tableViewer, SWT.NONE);
 		TableColumn tblclmnLocalPort = tableViewerLocalPort.getColumn();
-		tblclmnLocalPort.setWidth(75);
+		tblclmnLocalPort.setWidth(70);
 		tblclmnLocalPort.setText("Local Port");
 		tableViewerLocalPort.setLabelProvider(new ColumnLabelProvider() {
 			@Override
@@ -109,7 +109,7 @@ public class StatusDialog extends Shell {
 		
 		TableViewerColumn tableViewerExternalPort = new TableViewerColumn(tableViewer, SWT.NONE);
 		TableColumn tblclmnExternalPort = tableViewerExternalPort.getColumn();
-		tblclmnExternalPort.setWidth(90);
+		tblclmnExternalPort.setWidth(91);
 		tblclmnExternalPort.setText("External Port");
 		tableViewerExternalPort.setLabelProvider(new ColumnLabelProvider() {
 			@Override
@@ -123,7 +123,7 @@ public class StatusDialog extends Shell {
 		
 		TableViewerColumn tableViewerIP = new TableViewerColumn(tableViewer, SWT.NONE);
 		TableColumn tblclmnIpRegexp = tableViewerIP.getColumn();
-		tblclmnIpRegexp.setWidth(117);
+		tblclmnIpRegexp.setWidth(102);
 		tblclmnIpRegexp.setText("IP RegExp");
 		tableViewerIP.setLabelProvider(new ColumnLabelProvider() {
 			@Override
@@ -137,7 +137,7 @@ public class StatusDialog extends Shell {
 		
 		TableViewerColumn tableViewerStatus = new TableViewerColumn(tableViewer, SWT.NONE);
 		TableColumn tblclmnStatus = tableViewerStatus.getColumn();
-		tblclmnStatus.setWidth(50);
+		tblclmnStatus.setWidth(72);
 		tblclmnStatus.setText("Status");
 		tableViewerStatus.setLabelProvider(new ColumnLabelProvider() {
 			@Override
@@ -154,6 +154,7 @@ public class StatusDialog extends Shell {
 					switch (status) {
 					case ERROR:
 						return colorRed;
+					case STOPPING:
 					case STARTED:
 						return colorGreen;
 					case STARTING:
@@ -168,7 +169,7 @@ public class StatusDialog extends Shell {
 		
 		TableViewerColumn tableViewerConn = new TableViewerColumn(tableViewer, SWT.NONE);
 		TableColumn tblclmnConnections = tableViewerConn.getColumn();
-		tblclmnConnections.setWidth(90);
+		tblclmnConnections.setWidth(56);
 		tblclmnConnections.setText("Connections");
 		tableViewerConn.setLabelProvider(new ColumnLabelProvider() {
 			@Override
@@ -182,7 +183,7 @@ public class StatusDialog extends Shell {
 		
 		TableViewerColumn tableViewerData = new TableViewerColumn(tableViewer, SWT.NONE);
 		TableColumn tblclmnDataTransfered = tableViewerData.getColumn();
-		tblclmnDataTransfered.setWidth(130);
+		tblclmnDataTransfered.setWidth(95);
 		tblclmnDataTransfered.setText("Total Flow(KB)");
 		tableViewerData.setLabelProvider(new ColumnLabelProvider() {
 			@Override
@@ -224,6 +225,38 @@ public class StatusDialog extends Shell {
 			}
 		});
 		
+		Button btnStart = new Button(this, SWT.NONE);
+		GridData gd_btnStart = new GridData(SWT.CENTER, SWT.TOP, false, false, 1, 1);
+		gd_btnStart.widthHint = 96;
+		btnStart.setLayoutData(gd_btnStart);
+		btnStart.setText("Start");
+		btnStart.addListener(SWT.Selection, ev->{
+			if(table.getSelectionCount() == 1) {
+				NATEntry entry = (NATEntry) table.getSelection()[0].getData();
+				if(entry.getStatus() == NATStatus.STOPPED || entry.getStatus() == NATStatus.ERROR) {
+					entry.setStatus(NATStatus.STARTING);
+					tableViewer.refresh();
+				}
+			}
+		});
+		
+		Button btnStop = new Button(this, SWT.NONE);
+		GridData gd_btnStop = new GridData(SWT.CENTER, SWT.CENTER, false, false, 1, 1);
+		gd_btnStop.widthHint = 96;
+		btnStop.setLayoutData(gd_btnStop);
+		btnStop.setText("Stop");
+		btnStop.addListener(SWT.Selection, ev->{
+			if(table.getSelectionCount() == 1) {
+				NATEntry entry = (NATEntry) table.getSelection()[0].getData();
+				if(entry.getStatus() == NATStatus.STARTED) {
+					entry.setStatus(NATStatus.STOPPING);
+					tableViewer.refresh();
+				} else if (entry.getStatus() == NATStatus.ERROR) {
+					entry.setStatus(NATStatus.STOPPED);
+					tableViewer.refresh();
+				}
+			}
+		});
 		
 		Button btnClose = new Button(this, SWT.CENTER);
 		GridData gd_btnClose = new GridData(SWT.CENTER, SWT.BOTTOM, false, false, 1, 1);

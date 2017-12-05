@@ -5,17 +5,16 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
-import java.nio.channels.Pipe;
-import java.nio.channels.SocketChannel;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
-import java.util.function.IntSupplier;
 
 import net.flyingff.snat.NATEntry.NATStatus;
 
@@ -30,30 +29,45 @@ public class Proxy {
 	private final NATEntry entry;
 	private final InetSocketAddress localAddress;
 	private AsynchronousServerSocketChannel assc;
-	private Map<SocketChannel, SockPairInfo> channelPairs = new HashMap<>();
+	private Set<SockPairInfo> channelPairs = new HashSet<>();
 	
 	public Proxy(NATEntry entry) {
 		this.entry = entry;
 		localAddress = new InetSocketAddress(LOCALHOST, entry.getLocalPort());
 	}
+	public NATEntry getEntry() {
+		return entry;
+	}
 	
-	public void start() throws IOException {
+	public void start() {
 		if(assc != null) throw new IllegalStateException();
 		
-		assc = AsynchronousServerSocketChannel.open();
-		assc.bind(new InetSocketAddress(entry.getExternalPort()));
-		entry.setStatus(NATStatus.STARTED);
+		try {
+			assc = AsynchronousServerSocketChannel.open();
+			assc.bind(new InetSocketAddress(entry.getExternalPort()));
+			entry.setStatus(NATStatus.STARTED);
+			acceptNew();
+			entry.resetConnections();
+		} catch (IOException e) {
+			entry.setStatus(NATStatus.ERROR);
+			e.printStackTrace();
+		}
 		
-		acceptNew();
 	}
 	private void acceptNew() {
 		CompletableFuture.supplyAsync(() -> {
-			while(true) try {
+			while(assc != null) try {
 				return assc.accept().get();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
+			} catch (ExecutionException e) {
+				if(!(e.getCause() instanceof AsynchronousCloseException)) {
+					e.printStackTrace();
+				}
+			} catch (InterruptedException e) { }
+			return null;
 		}).thenCompose((Function<AsynchronousSocketChannel, CompletableFuture<SockPairInfo>>)sockExt->{
+			if(sockExt == null) {
+				return CompletableFuture.completedFuture(null);
+			}
 			acceptNew();
 			InetSocketAddress addr;
 			AsynchronousSocketChannel sockLocal = null;
@@ -83,6 +97,7 @@ public class Proxy {
 				CompletableFuture.runAsync(()->{
 					try { Thread.sleep(1000); } catch (Exception e) { }
 					future.complete(SockPairInfo.failed(sockExt, sockLocal_));
+					System.err.println("Time out...");
 				});
 				return future;
 			} catch (IOException e) {
@@ -90,54 +105,30 @@ public class Proxy {
 				return CompletableFuture.completedFuture(SockPairInfo.failed(sockExt, sockLocal));
 			}
 		}).thenAccept(x->{
-			if(x == null) throw new AssertionError();
+			if(x == null) return;
 			if(x.isLocalFailed()) {
 				x.closeAll();
 			} else {
 				x.pipe();
+				entry.incConnections();
 			}
 		});
-		
-		/*.thenAccept(sockLocal->{
-			if(sockLocal != null) {
-				
-			}
-			SockPairInfo info = new SockPairInfo();
-			info.sockExternal = sockExt;
-			info.sockLocal = sockLocal;
-			channelPairs.put(sockExt, info);
-			channelPairs.put(sockLocal, info);
-		});*/
 	}
 	
-	public void onAccept() throws IOException{
-		// check is IP valid
-	}
-	public void onConnect(SocketChannel sockLocal) {
-		// local connection finished connection
-		
-	}
-	public void onReceieve(SocketChannel sock) {
-		// local or external socket data sent
-	}
-
-	public void onClose(SocketChannel ch) {
-		// local or external socket close
-		// remains to handle data that stored in buffer
-	}
 	
-	public void onTick() {
-		// check for time-out connection?
-	}
-	
-	public void stop() throws IOException{
-		assc.close();
-		for(SocketChannel ch : channelPairs.keySet()) {
-			ch.close();
+	public void stop() {
+		try {
+			assc.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		for(SockPairInfo ch : channelPairs) {
+			ch.closeAll();
 		}
 		channelPairs.clear();
 		assc = null;
 		entry.setStatus(NATStatus.STOPPED);
+		entry.resetConnections();
 	}
 	
 }
