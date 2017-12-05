@@ -3,18 +3,19 @@ package net.flyingff.snat;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.SocketOption;
-import java.net.SocketOptions;
-import java.net.StandardSocketOptions;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.AsynchronousServerSocketChannel;
+import java.nio.channels.AsynchronousSocketChannel;
+import java.nio.channels.CompletionHandler;
+import java.nio.channels.Pipe;
 import java.nio.channels.SocketChannel;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
+import java.util.function.IntSupplier;
 
 import net.flyingff.snat.NATEntry.NATStatus;
 
@@ -27,44 +28,90 @@ public class Proxy {
 		}
 	}
 	private final NATEntry entry;
-	private ServerSocketChannel ssc;
-	private Selector selector;
+	private final InetSocketAddress localAddress;
+	private AsynchronousServerSocketChannel assc;
 	private Map<SocketChannel, SockPairInfo> channelPairs = new HashMap<>();
 	
-	public Proxy(NATEntry entry, Selector selector) {
+	public Proxy(NATEntry entry) {
 		this.entry = entry;
-		this.selector = null;
+		localAddress = new InetSocketAddress(LOCALHOST, entry.getLocalPort());
 	}
 	
 	public void start() throws IOException {
-		if(ssc != null) throw new IllegalStateException();
+		if(assc != null) throw new IllegalStateException();
 		
-		ssc = ServerSocketChannel.open();
-		ssc.configureBlocking(false);
-		ssc.bind(new InetSocketAddress(entry.getExternalPort()));
-		
-		ssc.register(selector, SelectionKey.OP_ACCEPT, this);
+		assc = AsynchronousServerSocketChannel.open();
+		assc.bind(new InetSocketAddress(entry.getExternalPort()));
 		entry.setStatus(NATStatus.STARTED);
+		
+		acceptNew();
+	}
+	private void acceptNew() {
+		CompletableFuture.supplyAsync(() -> {
+			while(true) try {
+				return assc.accept().get();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}).thenCompose((Function<AsynchronousSocketChannel, CompletableFuture<SockPairInfo>>)sockExt->{
+			acceptNew();
+			InetSocketAddress addr;
+			AsynchronousSocketChannel sockLocal = null;
+			try {
+				addr = (InetSocketAddress) sockExt.getRemoteAddress();
+				String addrString = addr.getAddress().getHostAddress();
+				if(!entry.getIpRegExp().matches(addrString)) {
+					sockExt.close();
+					return CompletableFuture.completedFuture(SockPairInfo.failed(sockExt));
+				}
+				sockLocal = AsynchronousSocketChannel.open();
+				CompletableFuture<SockPairInfo> future = new CompletableFuture<>();
+				SockPairInfo pair = new SockPairInfo(sockExt, sockLocal, false);
+				
+				AsynchronousSocketChannel sockLocal_ = sockLocal;
+				sockLocal.connect(localAddress, future, new CompletionHandler<Void, CompletableFuture<SockPairInfo>>() {
+					@Override
+					public void completed(Void result, CompletableFuture<SockPairInfo> attachment) {
+						attachment.complete(pair);
+					}
+					@Override
+					public void failed(Throwable exc, CompletableFuture<SockPairInfo> attachment) {
+						attachment.complete(SockPairInfo.failed(sockExt, sockLocal_));
+					}
+				});
+				// timeout
+				CompletableFuture.runAsync(()->{
+					try { Thread.sleep(1000); } catch (Exception e) { }
+					future.complete(SockPairInfo.failed(sockExt, sockLocal_));
+				});
+				return future;
+			} catch (IOException e) {
+				e.printStackTrace();
+				return CompletableFuture.completedFuture(SockPairInfo.failed(sockExt, sockLocal));
+			}
+		}).thenAccept(x->{
+			if(x == null) throw new AssertionError();
+			if(x.isLocalFailed()) {
+				x.closeAll();
+			} else {
+				x.pipe();
+			}
+		});
+		
+		/*.thenAccept(sockLocal->{
+			if(sockLocal != null) {
+				
+			}
+			SockPairInfo info = new SockPairInfo();
+			info.sockExternal = sockExt;
+			info.sockLocal = sockLocal;
+			channelPairs.put(sockExt, info);
+			channelPairs.put(sockLocal, info);
+		});*/
 	}
 	
-	public void onAccept(SocketChannel sockExt) throws IOException{
+	public void onAccept() throws IOException{
 		// check is IP valid
-		InetSocketAddress addr = (InetSocketAddress) sockExt.getRemoteAddress();
-		String addrString = addr.getAddress().getHostAddress();
-		if(!entry.getIpRegExp().matches(addrString)) {
-			sockExt.close();
-			return;
-		}
-		
-		SocketChannel sockLocal = SocketChannel.open(new InetSocketAddress(LOCALHOST, entry.getLocalPort()));
-		sockLocal.configureBlocking(false);
-		
-		sockLocal.register(selector, SelectionKey.OP_CONNECT, this);
-		SockPairInfo info = new SockPairInfo();
-		info.sockExternal = sockExt;
-		info.sockLocal = sockLocal;
-		channelPairs.put(sockExt, info);
-		channelPairs.put(sockLocal, info);
 	}
 	public void onConnect(SocketChannel sockLocal) {
 		// local connection finished connection
@@ -84,20 +131,82 @@ public class Proxy {
 	}
 	
 	public void stop() throws IOException{
-		ssc.close();
+		assc.close();
 		for(SocketChannel ch : channelPairs.keySet()) {
 			ch.close();
 		}
 		channelPairs.clear();
-		ssc = null;
+		assc = null;
 		entry.setStatus(NATStatus.STOPPED);
 	}
+	
 }
 
 class SockPairInfo {
-	SocketChannel sockExternal, sockLocal;
-	final long localConnectTime = System.currentTimeMillis();
-	ByteBuffer bufferExtToLocal = ByteBuffer.allocate(65536),
-			bufferLocalToExt = ByteBuffer.allocate(65536);
+	private final AsynchronousSocketChannel sockExternal, sockLocal;
+	private final long localConnectTime = System.currentTimeMillis();
+	private ByteBuffer bufferExtToLocal,
+			bufferLocalToExt;
+	private final boolean isLocalFailed;
+	
+	public SockPairInfo(AsynchronousSocketChannel sockExternal, 
+			AsynchronousSocketChannel sockLocal, boolean isLocalFailed) {
+		this.sockExternal = sockExternal;
+		this.sockLocal = sockLocal;
+		this.isLocalFailed = isLocalFailed;
+	}
+
+	public void pipe() {
+		sockExternal.read(bufferExtToLocal, bufferExtToLocal, new CompletionHandler<Integer, ByteBuffer>() {
+			@Override
+			public void completed(Integer result, ByteBuffer attachment) {
+				
+			}
+			@Override
+			public void failed(Throwable exc, ByteBuffer attachment) {
+				
+			}
+		});
+	}
+
+	public AsynchronousSocketChannel getSockExternal() {
+		return sockExternal;
+	}
+
+	public AsynchronousSocketChannel getSockLocal() {
+		return sockLocal;
+	}
+
+	public long getLocalConnectTime() {
+		return localConnectTime;
+	}
+
+	public ByteBuffer getBufferExtToLocal() {
+		return bufferExtToLocal;
+	}
+
+	public ByteBuffer getBufferLocalToExt() {
+		return bufferLocalToExt;
+	}
+
+	public boolean isLocalFailed() {
+		return isLocalFailed;
+	}
+	public void closeAll() {
+		Optional.ofNullable(sockExternal).ifPresent(it->{
+			try { it.close(); } catch (IOException e) { }
+		});
+		Optional.ofNullable(sockLocal).ifPresent(it->{
+			try { it.close(); } catch (IOException e) { }
+		});
+	}
+	
+	public static final SockPairInfo failed(AsynchronousSocketChannel sockExternal,
+			AsynchronousSocketChannel sockLocal) {
+		return new SockPairInfo(sockExternal, sockLocal, true);
+	}
+	public static final SockPairInfo failed(AsynchronousSocketChannel sockExternal) {
+		return new SockPairInfo(sockExternal, null, true);
+	}
 	
 }
