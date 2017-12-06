@@ -26,6 +26,7 @@ public class Application {
 	private final TrayItem tray;
 	private final Image icon;
 	private StatusDialog sh;
+	private LogViewer logViewer;
 	
 	private List<NATEntry> entries;
 	
@@ -78,6 +79,20 @@ public class Application {
 		itShowDialog.addListener(SWT.Selection, ev->{
 			showStatusDialog();
 		});
+		
+		MenuItem itShowLog = new MenuItem(popup, SWT.NONE);
+		itShowLog.setText("Show Log Viewer");
+		itShowLog.addListener(SWT.Selection, ev->{
+			if(logViewer != null) {
+				logViewer.setActive();
+				logViewer.setFocus();
+			} else {
+				logViewer = new LogViewer(Display.getDefault());
+				logViewer.addListener(SWT.Dispose, e->logViewer = null);
+			}
+		});
+		
+		
 		new MenuItem(popup, SWT.SEPARATOR);
 		MenuItem itExit = new MenuItem(popup, SWT.NONE);
 		itExit.setText("Exit");
@@ -98,6 +113,7 @@ public class Application {
 	}
 	private void showStatusDialog() {
 		sh.setVisible(true);
+		sh.setActive();
 		sh.setFocus();
 	}
 	

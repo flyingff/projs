@@ -184,7 +184,7 @@ public class StatusDialog extends Shell {
 		TableViewerColumn tableViewerData = new TableViewerColumn(tableViewer, SWT.NONE);
 		TableColumn tblclmnDataTransfered = tableViewerData.getColumn();
 		tblclmnDataTransfered.setWidth(95);
-		tblclmnDataTransfered.setText("Total Flow(KB)");
+		tblclmnDataTransfered.setText("Total Flow");
 		tableViewerData.setLabelProvider(new ColumnLabelProvider() {
 			@Override
 			public String getText(Object e) {
@@ -334,9 +334,11 @@ public class StatusDialog extends Shell {
 	}
 	@Override
 	public void setVisible(boolean visible) {
-		Rectangle bound = getDisplay().getPrimaryMonitor().getBounds();
-		setLocation(bound.x + (bound.width - WIDTH_OF_SHELL) / 2, 
-				bound.y + (bound.height - HEIGHT_OF_SHELL) / 2);
+		if(visible) {
+			Rectangle bound = getDisplay().getPrimaryMonitor().getBounds();
+			setLocation(bound.x + (bound.width - WIDTH_OF_SHELL) / 2, 
+					bound.y + (bound.height - HEIGHT_OF_SHELL) / 2);
+		}
 		super.setVisible(visible);
 	}
 	

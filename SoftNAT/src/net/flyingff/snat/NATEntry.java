@@ -47,6 +47,9 @@ public class NATEntry implements Serializable {
 	public String getIpRegExp() {
 		return ipRegExp.toString();
 	}
+	public boolean testIP(String ip) {
+		return ipRegExp.matcher(ip).matches();
+	}
 
 	public boolean setIpRegExp(String ipRegExp) {
 		try {
@@ -65,14 +68,24 @@ public class NATEntry implements Serializable {
 		connections += 1;
 	}
 	public void decConnections() {
-		connections += 1;
+		connections -= 1;
 	}
 	public void resetConnections() {
 		connections = 0;
 	}
 
-	public long getDataTransfered() {
-		return dataTransfered;
+	private static final String[] UNIT = {
+			"Byte", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "?!"
+	};
+	public String getDataTransfered() {
+		int unit = 0;
+		double result = dataTransfered;
+		while(result > 1000) {
+			result /= 1024;
+			unit++;
+		}
+		unit = Math.min(unit, UNIT.length - 1);
+		return String.format("%.2f%s", result, UNIT[unit]);
 	}
 
 	public void acuumulateDataTransfered(long dataTransfered) {
