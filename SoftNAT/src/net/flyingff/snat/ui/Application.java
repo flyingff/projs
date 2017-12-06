@@ -42,7 +42,7 @@ public class Application {
 		new ProxyManager(entries);
 
 		while(!sh.isDisposed()) {
-			if(d.readAndDispatch()) {
+			if(!d.readAndDispatch()) {
 				d.sleep();
 			}
 		}
@@ -88,6 +88,7 @@ public class Application {
 				logViewer.setFocus();
 			} else {
 				logViewer = new LogViewer(Display.getDefault());
+				logViewer.setImage(icon);
 				logViewer.addListener(SWT.Dispose, e->logViewer = null);
 			}
 		});

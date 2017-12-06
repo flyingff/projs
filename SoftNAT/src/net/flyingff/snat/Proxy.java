@@ -95,7 +95,6 @@ public class Proxy {
 				SockPairInfo pair = new SockPairInfo(sockExt, sockLocal);
 				
 				AsynchronousSocketChannel sockLocal_ = sockLocal;
-				TheLogger.log("Connect to " + localAddress + "...");
 				sockLocal.connect(localAddress, future, new CompletionHandler<Void, CompletableFuture<SockPairInfo>>() {
 					@Override
 					public void completed(Void result, CompletableFuture<SockPairInfo> attachment) {
@@ -127,10 +126,10 @@ public class Proxy {
 				x.closeAll();
 			} else {
 				try {
-					TheLogger.log("Connect to " + x.getSockLocal().getRemoteAddress() +  " succeed.");
+					TheLogger.log("Bridge from", x.getSockExternal().getRemoteAddress(), "to", x.getSockLocal().getRemoteAddress(), "established.");
 				} catch (IOException e) { e.printStackTrace(); }
 				x.pipe(()->{
-					TheLogger.log("Connection closed.");
+					TheLogger.log("One connection pair closed.");
 					entry.decConnections();
 				}, flow->{
 					entry.acuumulateDataTransfered(flow);

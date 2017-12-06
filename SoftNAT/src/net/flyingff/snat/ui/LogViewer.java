@@ -61,6 +61,8 @@ public class LogViewer extends Shell {
 		
 		TableViewerColumn tvcIcon = new TableViewerColumn(tableViewer, SWT.NONE);
 		TableColumn tblclmnIcon = tvcIcon.getColumn();
+		tblclmnIcon.setResizable(false);
+		tblclmnIcon.setAlignment(SWT.CENTER);
 		tblclmnIcon.setWidth(20);
 		tblclmnIcon.setText("Icon");
 		
