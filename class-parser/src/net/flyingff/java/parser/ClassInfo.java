@@ -1,5 +1,6 @@
 package net.flyingff.java.parser;
 
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,6 +40,7 @@ public class ClassInfo {
 	}
 	@Override
 	public String toString() {
-		return "ClassInfo [" + name + "[" + Integer.toHexString(modifiers) + "] -> " + references + "]";
+		
+		return "ClassInfo [" + name + "[" + Modifier.toString(modifiers) + "] -> " + references + "]";
 	}
 }
