@@ -1,5 +1,6 @@
 package net.flyingff.java.parser;
 
+import java.awt.FontMetrics;
 import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -26,7 +27,7 @@ public class ClassViewInfo {
 	
 	public ClassViewInfo(String name, Collection<String> content, Collection<String> dependencies) {
 		this.name = name;
-		this.simpleName = getSimpleName(name);
+		this.simpleName = "Group " + name.substring(6);
 		this.group = true;
 		this.dependencies = new ArrayList<>(dependencies);
 		this.contentClass = new ArrayList<>(content);
@@ -55,6 +56,37 @@ public class ClassViewInfo {
 	}
 	@Override
 	public String toString() {
-		return name;
+		if(group) {
+			return simpleName + " -> " + contentClass;
+		} else {
+			return name;
+		}
+	}
+	public void updateWidth(FontMetrics fm) {
+		int width = fm.stringWidth(simpleName) + 10;
+		rect.width = Math.max(width, WIDTH);
+	}
+	public Collection<? extends String> getMessages() {
+		List<String> msg = new ArrayList<>();
+		if(group) {
+			msg.add(name);
+			msg.add("Group content:");
+			contentClass.forEach(it->{
+				msg.add("  " + it);
+			});
+		} else {
+			msg.add(name + "(" + simpleName + ")");
+		}
+		
+		msg.add("Dependencies:");
+		if(dependencies.isEmpty()) {
+			msg.add("  (empty)");
+		} else {
+			dependencies.forEach(it->{
+				msg.add("  " + it);
+			});
+		}
+		
+		return msg;
 	}
 }

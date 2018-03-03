@@ -86,7 +86,7 @@ public class Main {
 		//});
 		
 		
-		List<String> baseClasses = new ArrayList<>();
+		Set<String> baseClasses = new HashSet<>();
 		dependencyMap.forEach((name, dep)->{
 			if(dep == null || dep.isEmpty()) {
 				baseClasses.add(name);
@@ -130,11 +130,14 @@ public class Main {
 			} else {
 				info = new ClassViewInfo(k, dependencyMap.get(k));
 			}
+			info.getDependencies().removeAll(baseClasses);
 			infos.get(v).add(info);
 		});
 		//output.sort(null);
 		
 		//output.forEach(System.out::println);
+		// remove last layer?
+		infos.remove(0);
 		new ViewUI(infos);
 	}
 	

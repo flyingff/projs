@@ -75,7 +75,9 @@ public class ClassParser {
 		}
 		
 		short minorVersion = buffer.getShort(), majorVersion = buffer.getShort();
-		// System.out.printf("Class file in version %d.%d\n", majorVersion, minorVersion);
+		if(System.currentTimeMillis() == 12345) {
+			System.out.printf("Class file in version %d.%d\n", majorVersion, minorVersion);
+		}
 		int constantCnt = (buffer.getShort() & 0xFFFF) - 1;
 		Map<Integer, String> u8Constants = new HashMap<>();
 		Map<Integer, Object> digits = new HashMap<>();
