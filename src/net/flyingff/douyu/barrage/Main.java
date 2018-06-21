@@ -1,63 +1,62 @@
 package net.flyingff.douyu.barrage;
 
-import java.awt.EventQueue;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-
 import net.flyingff.douyu.barrage.resolver.AllMessageListener;
-import net.flyingff.douyu.barrage.resolver.Gift;
-import net.flyingff.douyu.barrage.resolver.Param;
-import net.flyingff.douyu.barrage.resolver.Type;
+import net.flyingff.douyu.barrage.resolver.GiftConfig;
 
 public class Main {
 	public static void main(String[] args) throws Exception {
-		BarrageLoginInfo info = BarrageAddressGetter.resolve("688").get();
+		BarrageLoginInfo info = BarrageAddressGetter.resolve("160504").get();
 		BarrageReceiver br = new BarrageReceiver(info);
 		br.start();
 		
+		FullScreenBarrageWindow fbw = new FullScreenBarrageWindow();
 		Map<String, int[]> map = new HashMap<>();
-		br.setListener(new AllMessageListener() {
-			
+		br.setListener(new AllMessageListener(info.giftConfig) {
 			@Override
-			@Type("dgb")
-			public void onOnlineGiftItem(@Param("nn")String userName,
-					@Param("gfid")String item,
-					@Param("hits") String hits) {
+			public void onChat(String userName, String text) {
+				super.onChat(userName, text);
+				fbw.pushBarrage(text, userName);
+			}
+			@Override
+			public void onOnlineGiftItem(String userName,
+					String item,
+					String hits) {
+				super.onOnlineGiftItem(userName, item, hits);
+				
 				int[] cnt = map.get(item);
 				if(cnt == null) {
 					map.put(item, cnt = new int[1]);
 				}
 				cnt[0] ++;
-				System.out.println(userName + "送出了" + Gift.getString(item) + (hits == null ? "" : "[连击" + hits + "]"));
+				print(info.giftConfig, map);
 			}
 		});
 		
-		JFrame fr = new JFrame("Statistic");
-		JLabel lb = new JLabel();
-		fr.add(lb);
-		EventQueue.invokeLater(()->{
-			print(map, lb);
-		});
-		fr.setSize(640, 480);
-		fr.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		fr.setLocationRelativeTo(null);
-		fr.setVisible(true);
+		/*
+		try(Scanner sc = new Scanner(System.in)) {
+			while(sc.hasNext()) {
+				String id = sc.next();
+				Gift g = info.giftConfig.get(id);
+				if(g == null) System.out.println("Not found");
+				else {
+					for(BufferedImage img : g.getImgs()) {
+						JOptionPane.showMessageDialog(null, new JLabel(new ImageIcon(img)));
+					}
+				}
+			}
+		}*/
+		
 	}
-	private static final void print(Map<String, int[]> x, JLabel lbl) {
+	private static final void print(GiftConfig giftConfig, Map<String, int[]> x) {
 		StringBuffer sb = new StringBuffer();
-		sb.append("<html><body>");
 		for(Entry<String, int[]> entry : x.entrySet()) {
-			sb.append(entry.getKey()).append(": ").append(entry.getValue()[0]).append("<br>");
+			sb.append(giftConfig.getString(entry.getKey())).append(": ").append(entry.getValue()[0]).append(", ");
 		}
-		sb.append("</body></html>");
-		lbl.setText(sb.toString());
-		lbl.repaint();
-		EventQueue.invokeLater(()->{
-			print(x, lbl);
-		});
+		sb.setLength(sb.length() - 1);
+		System.out.println(sb.toString());
 	}
 }

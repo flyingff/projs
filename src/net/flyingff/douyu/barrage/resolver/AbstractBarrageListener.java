@@ -7,13 +7,30 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 public abstract class AbstractBarrageListener {
+	public static Method getDeclaredMethod(Object object, String methodName, Class<?> ... parameterTypes){
+		 Method method = null;
+		 for(Class<?> clazz = object.getClass() ; clazz != Object.class ; clazz = clazz.getSuperclass()) {
+			 try {    
+				 method = clazz.getDeclaredMethod(methodName, parameterTypes);
+				 if(method.getAnnotation(Type.class) != null) {
+					 return method;
+				 }
+			 } catch(NoSuchMethodException e) {
+			 }catch (Exception e) { 
+				 e.printStackTrace();
+			 }
+		 }
+		 return null;
+	}
+	
 	private Map<String, TypeHandler> handlerMap = new HashMap<>();
 	public AbstractBarrageListener() {
-		for(Method m : getClass().getDeclaredMethods()) {
-			Type t = m.getAnnotation(Type.class);
-			if(t == null) {
+		for(Method mx : getClass().getMethods()) {
+			Method m = getDeclaredMethod(this, mx.getName(), mx.getParameterTypes());
+			if(m == null) {
 				continue;
 			}
+			Type t = m.getAnnotation(Type.class);
 			String typeName = t.value();
 			if(handlerMap.containsKey(typeName)) {
 				throw new AssertionError("Duplicate handler for type " + typeName);

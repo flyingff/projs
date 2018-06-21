@@ -1,8 +1,12 @@
 package net.flyingff.douyu.barrage.resolver;
 
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.net.URL;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-
+/*
 class Holder {
 	static final Map<String, Gift> refMap = new HashMap<>();
 }
@@ -45,11 +49,61 @@ public enum Gift {
 		return value;
 	}
 	
-	public static Gift get(String id) {
-		return Holder.refMap.getOrDefault(id, UNKNOWN);
+	
+}
+*/
+
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+
+public final class Gift {
+	public static final GiftConfig initialize(Map<String, Map<String,String>> info) {
+		Map<String, Gift> giftMap = new HashMap<>();
+		for(java.util.Map.Entry<String, Map<String, String>> entry : info.entrySet()) {
+			String name, intro, devote;
+			String id = entry.getKey();
+			Map<String, String> map = entry.getValue();
+			
+			name = map.get("name");
+			intro = map.get("intro");
+			devote = map.get("devote");
+			Gift g = new Gift(id, name, intro, (int) Math.round(Double.parseDouble(devote)), map.get("himg"));
+			giftMap.put(id, g);
+		}
+		return new GiftConfig(giftMap);
 	}
-	public static String getString(String id) {
-		Gift g = Holder.refMap.get(id);
-		return g == null ? "[" + id + "]" : g.name;
+	
+	public final String id, name, intro, himg;
+	public final int value;
+	private BufferedImage[] imgs = null;
+	private Gift(String id, String name, String intro, int devote, String himg) {
+		this.id = id;
+		this.name = name;
+		this.intro = intro;
+		this.value = devote;
+		this.himg = himg;
+	}
+	public BufferedImage[] getImgs() {
+		if(imgs == null) {
+			try (ImageInputStream iis = ImageIO.createImageInputStream(new URL(himg).openStream())) {
+				ImageReader reader = (ImageReader) ImageIO.getImageReadersByFormatName("gif").next();
+				reader.setInput(iis, false);
+				int cnt = reader.getNumImages(true);
+				imgs = new BufferedImage[cnt];
+				Arrays.setAll(imgs, it -> {
+					try { return reader.read(it); } catch (IOException e) {
+						throw new RuntimeException(e);
+					}
+				});
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
+		}
+		return imgs;
+	}
+	@Override
+	public String toString() {
+		return name;
 	}
 }

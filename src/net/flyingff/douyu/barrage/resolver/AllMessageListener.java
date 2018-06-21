@@ -3,6 +3,11 @@ package net.flyingff.douyu.barrage.resolver;
 import java.util.Map;
 
 public class AllMessageListener extends AbstractBarrageListener {
+	private GiftConfig giftConfig;
+	public AllMessageListener(GiftConfig giftConfig) {
+		this.giftConfig = giftConfig;
+	}
+	
 	// ---------------
 	// 日常类型
 	// ---------------
@@ -44,7 +49,7 @@ public class AllMessageListener extends AbstractBarrageListener {
 	public void onOnlineGiftItem(@Param("nn")String userName,
 			@Param("gfid")String item,
 			@Param("hits") String hits) {
-		System.out.println(userName + "送出了" + Gift.getString(item) + (hits == null ? "" : "[连击" + hits + "]"));
+		System.out.println(userName + "送出了" + giftConfig.getString(item) + (hits == null ? "" : "[连击" + hits + "]"));
 	}
 	@Type("ggbb")
 	public void onRedPacket2() {}
