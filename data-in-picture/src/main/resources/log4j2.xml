@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Configuration status="INFO">
+	<Properties>
+        <Property name="log_path">${sys:catalina.home}/logs/dpic/</Property>
+    </Properties>
+    
+  <Appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+    </Console>
+    <RollingFile name="DailyRollingFile" fileName="${log_path}/stamper.log"
+            filePattern="${log_path}/dpic%d{yyyy-MM-dd}.log">
+            <PatternLayout pattern="[%d][%t][%p][%c:%L] %m%n" />
+            <TimeBasedTriggeringPolicy  interval="1"/>
+　　　　　　　<SizeBasedTriggeringPolicy size="10 MB" /> 
+        </RollingFile>
+  </Appenders>
+  
+  <Loggers>
+    <Root level="info">
+      <AppenderRef ref="Console"/>
+      <AppenderRef ref="DailyRollingFile" />
+    </Root>
+  </Loggers>
+</Configuration>
