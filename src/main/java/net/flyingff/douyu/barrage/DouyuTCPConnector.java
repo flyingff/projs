@@ -2,6 +2,7 @@ package net.flyingff.douyu.barrage;
 
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -140,7 +141,7 @@ public abstract class DouyuTCPConnector {
 		});
 		sb.append("\u0000");
 		
-		byte[] content = sb.toString().getBytes(Charset.forName("utf-8"));
+		byte[] content = sb.toString().getBytes(Charset.forName("gbk"));
 		
 		int dataLen = content.length + 8;
 		
@@ -173,7 +174,12 @@ public abstract class DouyuTCPConnector {
 		
 		byte[] sData = new byte[len - 8];
 		buffer.get(sData);
-		String str = new String(sData, 0, sData.length - 1);
+		String str;
+		try {
+			str = new String(sData, 0, sData.length - 1, "utf-8");
+		} catch (UnsupportedEncodingException e) {
+			throw new RuntimeException(e);
+		}
 
 		if(DEBUG) {
 			System.out.println("Deserialize:" + str);

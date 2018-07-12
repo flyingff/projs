@@ -1,11 +1,11 @@
 package net.flyingff.douyu.barrage;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Map.Entry;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
 import net.flyingff.douyu.barrage.resolver.AllMessageListener;
-import net.flyingff.douyu.barrage.resolver.GiftConfig;
 
 public class Main {
 	public static void main(String[] args) throws Exception {
@@ -13,26 +13,50 @@ public class Main {
 		BarrageReceiver br = new BarrageReceiver(info);
 		br.start();
 		
-		FullScreenBarrageWindow fbw = new FullScreenBarrageWindow();
-		Map<String, int[]> map = new HashMap<>();
+		Class.forName("com.mysql.jdbc.Driver");
+		Connection con = DriverManager.getConnection("jdbc:mysql://115.154.137.62:3306/stamper?user=stamper&password=stamper&useUnicode=true&characterEncoding=UTF-8");
+		PreparedStatement psBarrage = con.prepareStatement("insert into `barrage`(`uname`, `content`, `time`) values(?,?,?)");
+		PreparedStatement psGift = con.prepareStatement("insert into `gift`(`gid`, `gname`, `uname`, `time`) values(?,?,?,?)");
+		
+		// FullScreenBarrageWindow fbw = new FullScreenBarrageWindow();
+		// Map<String, int[]> map = new HashMap<>();
 		br.setListener(new AllMessageListener(info.giftConfig) {
 			@Override
 			public void onChat(String userName, String text) {
 				super.onChat(userName, text);
-				fbw.pushBarrage(text, userName);
+				// fbw.pushBarrage(text, userName);
+				try {
+					psBarrage.setString(1, userName);
+					psBarrage.setString(2, text);
+					psBarrage.setLong(3, System.currentTimeMillis());
+					psBarrage.execute();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
 			}
 			@Override
 			public void onOnlineGiftItem(String userName,
 					String item,
 					String hits) {
 				super.onOnlineGiftItem(userName, item, hits);
-				
+				/*
 				int[] cnt = map.get(item);
 				if(cnt == null) {
 					map.put(item, cnt = new int[1]);
 				}
 				cnt[0] ++;
 				print(info.giftConfig, map);
+				*/
+				try {
+					psGift.setInt(1, Integer.parseInt(item));
+					psGift.setString(2, info.giftConfig.getString(item));
+					psGift.setString(3, userName);
+					psGift.setLong(4, System.currentTimeMillis());
+					psGift.execute();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+				
 			}
 		});
 		
@@ -49,8 +73,8 @@ public class Main {
 				}
 			}
 		}*/
-		
 	}
+	/*
 	private static final void print(GiftConfig giftConfig, Map<String, int[]> x) {
 		StringBuffer sb = new StringBuffer();
 		for(Entry<String, int[]> entry : x.entrySet()) {
@@ -59,4 +83,5 @@ public class Main {
 		sb.setLength(sb.length() - 1);
 		System.out.println(sb.toString());
 	}
+	*/
 }
